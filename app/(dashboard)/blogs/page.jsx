@@ -27,6 +27,8 @@ export default function Page() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [image, setImage] = useState(null);
+  // Form state
+  const [language, setLanguage] = useState(""); // default 'uz'
   const [isActive, setIsActive] = useState(true);
   const [editingId, setEditingId] = useState(null);
 
@@ -88,28 +90,31 @@ export default function Page() {
   };
 
   // Create blog
-  const handleCreate = async () => {
-    if (!title || !content || !image) {
-      alert("Iltimos, barcha maydonlarni to'ldiring va rasm tanlang!");
-      return;
-    }
+  // Create blog
+const handleCreate = async () => {
+  if (!title || !content || !image) {
+    alert("Iltimos, barcha maydonlarni to'ldiring va rasm tanlang!");
+    return;
+  }
 
-    const formData = new FormData();
-    formData.append("title", title);
-    formData.append("content", content);
-    formData.append("image", image);
-    formData.append("is_active", isActive);
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("content", content);
+  formData.append("image", image);
+  formData.append("is_active", isActive);
+  formData.append("language", language);  // <-- qo‘shildi
 
-    try {
-      await createBlog(formData).unwrap();
-      alert("Blog muvaffaqiyatli qo'shildi!");
-      closeModal();
-      refetch();
-    } catch (err) {
-      console.error("Create error:", err);
-      alert(`Xato yuz berdi: ${err?.data?.message || err.message}`);
-    }
-  };
+  try {
+    await createBlog(formData).unwrap();
+    alert("Blog muvaffaqiyatli qo'shildi!");
+    closeModal();
+    refetch();
+  } catch (err) {
+    console.error("Create error:", err);
+    alert(`Xato yuz berdi: ${err?.data?.message || err.message}`);
+  }
+};
+
 
   // Update blog
   const handleUpdate = async () => {
@@ -121,6 +126,7 @@ export default function Page() {
     const formData = new FormData();
     formData.append("title", title);
     formData.append("content", content);
+    formData.append("language", language); 
     formData.append("is_active", isActive);
     if (image) formData.append("image", image);
 
@@ -217,8 +223,12 @@ export default function Page() {
                   </div>
                 </div>
 
+
                 {/* Content */}
                 <div className="p-6">
+                  <p className="text-gray-400 text-xs mb-2">
+  {blog.date_posted?.split("T")[0]} <span>{blog.language}</span>
+</p>
                   <h3 className="font-bold text-xl text-white  mb-3 line-clamp-2 group-hover:text-gray-300 transition-colors">
                     {blog.title}
                   </h3>
@@ -300,6 +310,23 @@ export default function Page() {
             placeholder="Write your post content..."
           />
         </div>
+
+        {/* Language */}
+<div>
+  <label className="block text-sm font-semibold mb-1 text-gray-300">
+    Language *
+  </label>
+  <select
+    value={language}
+    onChange={(e) => setLanguage(e.target.value)}
+    className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-white/20 text-sm"
+  >
+    <option value="uz">Uzbek</option>
+    <option value="en">English</option>
+    <option value="ru">Russian</option>
+  </select>
+</div>
+
 
         {/* Image Upload */}
         <div>
