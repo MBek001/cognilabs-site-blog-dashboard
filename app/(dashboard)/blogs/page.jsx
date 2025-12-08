@@ -13,6 +13,7 @@ export default function Page() {
   // Queries
   const { data: blogs, error: getError, isLoading: isLoadingBlogs, isError: isGetError, refetch } = useGetAllBlogsQuery();
   const router = useRouter()
+  
   // Mutations
   const [createBlog, { isLoading: isCreating, isError: isCreateError, error: createError }] = useCreateBlogMutation();
   const [updateBlog, { isLoading: isUpdating, isError: isUpdateError, error: updateError }] = useEditBlogMutation();
@@ -27,21 +28,26 @@ export default function Page() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [image, setImage] = useState(null);
-  // Form state
-  const [language, setLanguage] = useState(""); // default 'uz'
+  const [language, setLanguage] = useState("uz");
   const [isActive, setIsActive] = useState(true);
   const [editingId, setEditingId] = useState(null);
 
+  // Filter state
+  const [selectedLanguage, setSelectedLanguage] = useState("all");
+
+  // Filtered blogs
+  const filteredBlogs = blogs?.filter(blog => 
+    selectedLanguage === "all" || blog.language === selectedLanguage
+  );
 
   useEffect(() => {
-      if (isGetError) {
-        // Masalan, backend 401 yoki 403 qaytarsa
-        const statusCode = getError?.status || getError?.response?.status
-        if (statusCode === 401 || statusCode === 403) {
-          router.push('/login') // login sahifasiga redirect
-        }
+    if (isGetError) {
+      const statusCode = getError?.status || getError?.response?.status
+      if (statusCode === 401 || statusCode === 403) {
+        router.push('/login')
       }
-    }, [isGetError, getError, router])
+    }
+  }, [isGetError, getError, router])
 
   // Modal functions
   const openCreateModal = () => {
@@ -50,6 +56,7 @@ export default function Page() {
     setContent("");
     setImage(null);
     setImagePreview(null);
+    setLanguage("uz");
     setIsActive(true);
     setEditingId(null);
     setIsModalOpen(true);
@@ -59,10 +66,11 @@ export default function Page() {
     setModalMode("edit");
     setTitle(blog.title);
     setContent(blog.content);
+    setLanguage(blog.language || "uz");
     setIsActive(blog.is_active);
     setEditingId(blog.id);
     setImage(null);
-    setImagePreview(blog.image);
+    setImagePreview(blog.image_url);
     setIsModalOpen(true);
   };
 
@@ -72,11 +80,11 @@ export default function Page() {
     setContent("");
     setImage(null);
     setImagePreview(null);
+    setLanguage("uz");
     setIsActive(true);
     setEditingId(null);
   };
 
-  // Handle image preview
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -89,34 +97,30 @@ export default function Page() {
     }
   };
 
-  // Create blog
-  // Create blog
-const handleCreate = async () => {
-  if (!title || !content || !image) {
-    alert("Iltimos, barcha maydonlarni to'ldiring va rasm tanlang!");
-    return;
-  }
+  const handleCreate = async () => {
+    if (!title || !content || !image) {
+      alert("Iltimos, barcha maydonlarni to'ldiring va rasm tanlang!");
+      return;
+    }
 
-  const formData = new FormData();
-  formData.append("title", title);
-  formData.append("content", content);
-  formData.append("image", image);
-  formData.append("is_active", isActive);
-  formData.append("language", language);  // <-- qo‘shildi
+    const formData = new FormData();
+    formData.append("title", title);
+    formData.append("content", content);
+    formData.append("image", image);
+    formData.append("is_active", isActive);
+    formData.append("language", language);
 
-  try {
-    await createBlog(formData).unwrap();
-    alert("Blog muvaffaqiyatli qo'shildi!");
-    closeModal();
-    refetch();
-  } catch (err) {
-    console.error("Create error:", err);
-    alert(`Xato yuz berdi: ${err?.data?.message || err.message}`);
-  }
-};
+    try {
+      await createBlog(formData).unwrap();
+      alert("Blog muvaffaqiyatli qo'shildi!");
+      closeModal();
+      refetch();
+    } catch (err) {
+      console.error("Create error:", err);
+      alert(`Xato yuz berdi: ${err?.data?.message || err.message}`);
+    }
+  };
 
-
-  // Update blog
   const handleUpdate = async () => {
     if (!title || !content) {
       alert("Iltimos, title va content maydonlarini to'ldiring!");
@@ -141,7 +145,6 @@ const handleCreate = async () => {
     }
   };
 
-  // Delete blog
   const handleDelete = async (id) => {
     if (!confirm("Rostan ham o'chirmoqchimisiz?")) return;
     try {
@@ -154,49 +157,100 @@ const handleCreate = async () => {
     }
   };
 
-  
-
   return (
     <div className="min-h-screen bg-white text-black p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h1 className="text-5xl md:text-6xl font-bold tracking-tight mb-2">
-              Manage <span className="text-gray-400">Blogs</span>
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-2">
+              Manage Your <span className="text-gray-400">Blogs</span>
             </h1>
           </div>
-          <button 
-            onClick={openCreateModal}
-            
-            className="group cursor-pointer relative px-8 py-3 bg-white text-black font-semibold rounded-full hover:bg-gray-100 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
-          >
-            <span className="flex items-center gap-2">
-              <span className="text-2xl">+</span>
-              <span>Create Post</span>
-            </span>
-          </button>
+          <div>
+            <button 
+              onClick={openCreateModal}
+              className="group cursor-pointer relative px-8 py-3 bg-white text-black font-semibold rounded-full hover:bg-gray-100 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-2xl">+</span>
+                <span>Create Post</span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Language Filter */}
+        <div className="mb-8 flex items-center gap-3">
+          <span className="text-gray-600 font-medium">Filter by language:</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedLanguage("all")}
+              className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                selectedLanguage === "all" 
+                  ? "bg-black text-white shadow-md" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setSelectedLanguage("uz")}
+              className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                selectedLanguage === "uz" 
+                  ? "bg-black text-white shadow-md" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              🇺🇿 Uzbek
+            </button>
+            <button
+              onClick={() => setSelectedLanguage("en")}
+              className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                selectedLanguage === "en" 
+                  ? "bg-black text-white shadow-md" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              🇬🇧 English
+            </button>
+            <button
+              onClick={() => setSelectedLanguage("ru")}
+              className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                selectedLanguage === "ru" 
+                  ? "bg-black text-white shadow-md" 
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              🇷🇺 Russian
+            </button>
+          </div>
         </div>
 
         {/* Blogs Grid */}
         {isLoadingBlogs ? (
           <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white"></div>
+            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-black"></div>
           </div>
         ) : isGetError ? (
           <div className="text-center py-20">
             <p className="text-red-400 text-lg">{getError?.data?.message || getError?.message}</p>
           </div>
-        ) : blogs?.length === 0 ? (
+        ) : filteredBlogs?.length === 0 ? (
           <div className="text-center py-20">
-            <p className="text-gray-500 text-xl">No posts yet. Create your first one!</p>
+            <p className="text-gray-500 text-xl">
+              {selectedLanguage === "all" 
+                ? "No posts yet. Create your first one!" 
+                : `No posts in ${selectedLanguage === "uz" ? "Uzbek" : selectedLanguage === "en" ? "English" : "Russian"}`
+              }
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {blogs?.map(blog => (
+            {filteredBlogs?.map(blog => (
               <div 
                 key={blog.id} 
-                className="group bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 hover:border-zinc-700 transition-all duration-300 hover:shadow-2xl hover:shadow-white/5 "
+                className="group bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800 hover:border-zinc-700 transition-all duration-300 hover:shadow-2xl hover:shadow-white/5"
               >
                 {/* Image Container */}
                 <div className="relative h-56 bg-zinc-800 overflow-hidden">
@@ -223,13 +277,17 @@ const handleCreate = async () => {
                   </div>
                 </div>
 
-
                 {/* Content */}
                 <div className="p-6">
-                  <p className="text-gray-400 text-xs mb-2">
-  {blog.date_posted?.split("T")[0]} <span>{blog.language}</span>
-</p>
-                  <h3 className="font-bold text-xl text-white  mb-3 line-clamp-2 group-hover:text-gray-300 transition-colors">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-gray-400 text-xs">
+                      {blog.date_posted?.split("T")[0]}
+                    </p>
+                    <span className="px-2 py-1 bg-zinc-800 text-gray-300 text-xs rounded-md font-medium">
+                      {blog.language === "uz" ? "🇺🇿 UZ" : blog.language === "en" ? "🇬🇧 EN" : "🇷🇺 RU"}
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-xl text-white mb-3 line-clamp-2 group-hover:text-gray-300 transition-colors">
                     {blog.title}
                   </h3>
                   <p className="text-gray-400 text-sm mb-6 line-clamp-3 leading-relaxed">
@@ -260,131 +318,127 @@ const handleCreate = async () => {
         )}
 
         {/* Modal */}
-       {/* Modal */}
-{isModalOpen && (
-  <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div className="bg-zinc-900 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden border border-zinc-800 shadow-2xl">
-      {/* Modal Header */}
-      <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
-        <h2 className="text-2xl text-white font-bold">
-          {modalMode === "create" ? "Create New Post" : "Edit Post"}
-        </h2>
-        <button 
-          onClick={closeModal}
-          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-zinc-800 transition-colors text-gray-400 hover:text-white"
-        >
-          <svg className="w-5 h-5 text-white cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+        {isModalOpen && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-zinc-900 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden border border-zinc-800 shadow-2xl">
+              {/* Modal Header */}
+              <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+                <h2 className="text-2xl text-white font-bold">
+                  {modalMode === "create" ? "Create New Post" : "Edit Post"}
+                </h2>
+                <button 
+                  onClick={closeModal}
+                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-zinc-800 transition-colors text-gray-400 hover:text-white"
+                >
+                  <svg className="w-5 h-5 text-white cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
 
-      {/* Modal Body */}
-      <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)] space-y-4">
-        {(isCreateError || isUpdateError) && (
-          <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-sm">
-            {createError?.data?.message || updateError?.data?.message || "An error occurred"}
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)] space-y-4">
+                {(isCreateError || isUpdateError) && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-sm">
+                    {createError?.data?.message || updateError?.data?.message || "An error occurred"}
+                  </div>
+                )}
+
+                {/* Title */}
+                <div>
+                  <label className="block text-sm font-semibold mb-1 text-gray-300">Title *</label>
+                  <input 
+                    type="text" 
+                    value={title} 
+                    onChange={(e) => setTitle(e.target.value)} 
+                    className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-white/20 text-sm placeholder-gray-500"
+                    placeholder="Enter post title"
+                  />
+                </div>
+
+                {/* Content */}
+                <div>
+                  <label className="block text-sm font-semibold mb-1 text-gray-300">Content *</label>
+                  <textarea 
+                    value={content} 
+                    onChange={(e) => setContent(e.target.value)}
+                    rows={4}
+                    className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-white/20 text-sm placeholder-gray-500 resize-none"
+                    placeholder="Write your post content..."
+                  />
+                </div>
+
+                {/* Language */}
+                <div>
+                  <label className="block text-sm font-semibold mb-1 text-gray-300">
+                    Language *
+                  </label>
+                  <select
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value)}
+                    className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-white/20 text-sm"
+                  >
+                    <option value="uz">🇺🇿 Uzbek</option>
+                    <option value="en">🇬🇧 English</option>
+                    <option value="ru">🇷🇺 Russian</option>
+                  </select>
+                </div>
+
+                {/* Image Upload */}
+                <div>
+                  <label className="block text-sm font-semibold mb-1 text-gray-300">
+                    {modalMode === "create" ? "Image *" : "New Image (optional)"}
+                  </label>
+                  <input 
+                    type="file" 
+                    onChange={handleImageChange} 
+                    accept="image/*"
+                    className="hidden"
+                    id="image-upload"
+                  />
+                  <label 
+                    htmlFor="image-upload"
+                    className="block w-full p-3 bg-zinc-800 border-2 border-dashed border-zinc-700 rounded-lg cursor-pointer hover:border-zinc-600 text-center text-gray-400 text-sm"
+                  >
+                    {image ? image.name : "Click to upload image"}
+                  </label>
+                </div>
+
+                {/* Active Toggle */}
+                <div className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg">
+                  <label htmlFor="is_active" className="text-sm font-semibold text-gray-300">Is Active</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsActive(!isActive)}
+                    className={`relative inline-flex h-6 w-12 items-center rounded-full transition-colors ${isActive ? 'bg-white' : 'bg-zinc-700'}`}
+                  >
+                    <span className={`inline-block h-5 w-5 transform rounded-full bg-black transition-transform ${isActive ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-6 border-t border-zinc-800 flex gap-3">
+                <button 
+                  onClick={closeModal}
+                  className="flex-1 px-4 py-2 bg-zinc-800 text-white font-semibold rounded-lg hover:bg-zinc-700 transition-colors border border-zinc-700 text-sm"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={modalMode === "create" ? handleCreate : handleUpdate} 
+                  disabled={isCreating || isUpdating} 
+                  className="flex-1 px-4 py-2 bg-white text-black font-semibold rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {modalMode === "create" 
+                    ? (isCreating ? "Creating..." : "Create Post") 
+                    : (isUpdating ? "Saving..." : "Save Changes")
+                  }
+                </button>
+              </div>
+            </div>
           </div>
         )}
-
-        {/* Title */}
-        <div>
-          <label className="block text-sm font-semibold mb-1 text-gray-300">Title *</label>
-          <input 
-            type="text" 
-            value={title} 
-            onChange={(e) => setTitle(e.target.value)} 
-            className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-white/20 text-sm placeholder-gray-500"
-            placeholder="Enter post title"
-          />
-        </div>
-
-        {/* Content */}
-        <div>
-          <label className="block text-sm font-semibold mb-1 text-gray-300">Content *</label>
-          <textarea 
-            value={content} 
-            onChange={(e) => setContent(e.target.value)}
-            rows={4}
-            className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-white/20 text-sm placeholder-gray-500 resize-none"
-            placeholder="Write your post content..."
-          />
-        </div>
-
-        {/* Language */}
-<div>
-  <label className="block text-sm font-semibold mb-1 text-gray-300">
-    Language *
-  </label>
-  <select
-    value={language}
-    onChange={(e) => setLanguage(e.target.value)}
-    className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-white/20 text-sm"
-  >
-    <option value="uz">Uzbek</option>
-    <option value="en">English</option>
-    <option value="ru">Russian</option>
-  </select>
-</div>
-
-
-        {/* Image Upload */}
-        <div>
-          <label className="block text-sm font-semibold mb-1 text-gray-300">
-            {modalMode === "create" ? "Image *" : "New Image (optional)"}
-          </label>
-          <input 
-            type="file" 
-            onChange={handleImageChange} 
-            accept="image/*"
-            className="hidden"
-            id="image-upload"
-          />
-          <label 
-            htmlFor="image-upload"
-            className="block w-full p-3 bg-zinc-800 border-2 border-dashed border-zinc-700 rounded-lg cursor-pointer hover:border-zinc-600 text-center text-gray-400 text-sm"
-          >
-            {image ? image.name : "Click to upload image"}
-          </label>
-         
-        </div>
-
-        {/* Active Toggle */}
-        <div className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg">
-          <label htmlFor="is_active" className="text-sm font-semibold text-gray-300">Is Active</label>
-          <button
-            type="button"
-            onClick={() => setIsActive(!isActive)}
-            className={`relative inline-flex h-6 w-12 items-center rounded-full transition-colors ${isActive ? 'bg-white' : 'bg-zinc-700'}`}
-          >
-            <span className={`inline-block h-5 w-5 transform rounded-full bg-black transition-transform ${isActive ? 'translate-x-6' : 'translate-x-1'}`} />
-          </button>
-        </div>
-      </div>
-
-      {/* Modal Footer */}
-      <div className="p-6 border-t border-zinc-800 flex gap-3">
-        <button 
-          onClick={closeModal}
-          className="flex-1 px-4 py-2 bg-zinc-800 text-white font-semibold rounded-lg hover:bg-zinc-700 transition-colors border border-zinc-700 text-sm"
-        >
-          Cancel
-        </button>
-        <button 
-          onClick={modalMode === "create" ? handleCreate : handleUpdate} 
-          disabled={isCreating || isUpdating} 
-          className="flex-1 px-4 py-2 bg-white text-black font-semibold rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-        >
-          {modalMode === "create" 
-            ? (isCreating ? "Creating..." : "Create Post") 
-            : (isUpdating ? "Saving..." : "Save Changes")
-          }
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
       </div>
     </div>
   );
