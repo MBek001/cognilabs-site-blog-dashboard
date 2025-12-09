@@ -14,11 +14,11 @@ export default function Home() {
         const res = await isAdmin().unwrap();
         console.log("Admin result:", res);
 
-        router.push("/dashboard");  // <-- TO‘G‘RI
+        router.push("/nimda-dashboard");  // <-- TO‘G‘RI
       } catch (err) {
         console.log("Admin error:", err);
 
-        router.push("/login");  // <-- TO‘G‘RI
+        router.push("/nimda-login");  // <-- TO‘G‘RI
       }
     };
 

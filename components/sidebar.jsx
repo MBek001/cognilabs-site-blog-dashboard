@@ -7,8 +7,8 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 
 const menuItems = [
-  { id: "dashboard", url: '/dashboard', label: "Dashboard", icon: LayoutDashboard },
-  { id: "blogs", url: '/blogs', label: "Blogs", icon: Book },
+  { id: "dashboard", url: '/nimda-dashboard', label: "Dashboard", icon: LayoutDashboard },
+  { id: "blogs", url: '/nimda-blogs', label: "Blogs", icon: Book },
 ]
 
 export default function Sidebar({ activeSection, setActiveSection }) {
@@ -21,7 +21,7 @@ export default function Sidebar({ activeSection, setActiveSection }) {
     // cookies ishlatilsa, cookies ni ham o'chirish kerak
 
     // 2) Login sahifasiga yo'naltirish
-    router.push("/login")
+    router.push("/nimda-login")
   }
 
   return (

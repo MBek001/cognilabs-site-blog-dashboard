@@ -41,7 +41,7 @@ export default function LoginPage({ onLogin }) {
         
       // agar onLogin funksiyasi mavjud bo‘lsa, chaqiramiz
       onLogin?.()
-      router.push("/dashboard")
+      router.push("/nimda-dashboard")
     } catch (err) {
       console.error(err)
       setError(err?.data?.message || "Email or password is incorrect")
