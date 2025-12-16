@@ -91,13 +91,7 @@ export default function LoginPage({ onLogin }) {
               {isLoading ? "Signing In..." : "Sign In"}
             </Button>
 
-            <div className="text-center text-sm text-muted-foreground">
-              <p>
-                Demo credentials: <br />
-                Email: any@email.com <br />
-                Password: 123456
-              </p>
-            </div>
+           
           </form>
         </CardContent>
       </Card>
