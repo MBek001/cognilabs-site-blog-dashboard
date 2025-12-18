@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { 
   useGetAllBlogsQuery, 
   useCreateBlogMutation, 
@@ -8,6 +8,12 @@ import {
 } from "../../../redux/api/blogApi";
 import Image from "next/image";
 import { useRouter } from 'next/navigation'
+
+// Import Quill dynamically to avoid SSR issues
+let Quill;
+if (typeof window !== 'undefined') {
+  Quill = require('quill');
+}
 
 export default function Page() {
   // Queries
@@ -18,6 +24,10 @@ export default function Page() {
   const [createBlog, { isLoading: isCreating, isError: isCreateError, error: createError }] = useCreateBlogMutation();
   const [updateBlog, { isLoading: isUpdating, isError: isUpdateError, error: updateError }] = useEditBlogMutation();
   const [deleteBlog, { isLoading: isDeleting, isError: isDeleteError, error: deleteError }] = useDeleteBlogMutation();
+
+  // Quill editor ref
+  const quillRef = useRef(null);
+  const editorRef = useRef(null);
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -49,6 +59,77 @@ export default function Page() {
     }
   }, [isGetError, getError, router])
 
+  // Initialize Quill editor
+  useEffect(() => {
+    if (isModalOpen && quillRef.current && !editorRef.current && Quill) {
+      // Load Quill CSS only once
+      if (!document.querySelector('link[href*="quill.snow.css"]')) {
+        const link = document.createElement('link');
+        link.href = 'https://cdn.quilljs.com/1.3.6/quill.snow.css';
+        link.rel = 'stylesheet';
+        document.head.appendChild(link);
+      }
+
+      editorRef.current = new Quill(quillRef.current, {
+        theme: 'snow',
+        placeholder: 'Write your post content...',
+        modules: {
+          toolbar: [
+            [{ 'header': [1, 2, 3, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+            [{ 'color': [] }, { 'background': [] }],
+            [{ 'align': [] }],
+            ['link', 'blockquote', 'code-block'],
+            ['clean']
+          ]
+        }
+      });
+
+      const editor = editorRef.current;
+
+      // Force LTR globally
+      editor.root.setAttribute('dir', 'ltr');
+      editor.root.style.direction = 'ltr';
+      editor.root.style.textAlign = 'left';
+
+      // Prevent Quill from auto-detecting direction
+      editor.root.classList.add('ql-direction-ltr');
+
+      // Clean and set initial content (for edit mode)
+      if (content) {
+        const cleanedContent = content
+          .replace(/\sdir=["']rtl["']/gi, '')
+          .replace(/\sdir=["']auto["']/gi, '')
+          .replace(/style=["'][^"']*direction:\s*rtl[^"']*["']/gi, '')
+          .replace(/style=["'][^"']*text-align:\s*right[^"']*["']/gi, '');
+
+        editor.root.innerHTML = cleanedContent;
+      }
+
+      // Listen for changes and enforce LTR + white text
+      editor.on('text-change', () => {
+        const htmlContent = editor.root.innerHTML;
+        setContent(htmlContent);
+
+        // Force LTR on all block elements
+        const blocks = editor.root.querySelectorAll('p, div, li, h1, h2, h3, blockquote');
+        blocks.forEach(block => {
+          block.setAttribute('dir', 'ltr');
+          block.style.direction = 'ltr';
+          block.style.textAlign = 'left';
+        });
+      });
+    }
+
+    // Cleanup when modal closes
+    return () => {
+      if (!isModalOpen && editorRef.current) {
+        editorRef.current = null;
+      }
+    };
+  }, [isModalOpen, content]);
+
   // Modal functions
   const openCreateModal = () => {
     setModalMode("create");
@@ -60,6 +141,7 @@ export default function Page() {
     setIsActive(true);
     setEditingId(null);
     setIsModalOpen(true);
+    editorRef.current = null;
   };
 
   const openEditModal = (blog) => {
@@ -72,6 +154,7 @@ export default function Page() {
     setImage(null);
     setImagePreview(blog.image_url);
     setIsModalOpen(true);
+    editorRef.current = null;
   };
 
   const closeModal = () => {
@@ -83,6 +166,7 @@ export default function Page() {
     setLanguage("uz");
     setIsActive(true);
     setEditingId(null);
+    editorRef.current = null;
   };
 
   const handleImageChange = (e) => {
@@ -290,9 +374,10 @@ export default function Page() {
                   <h3 className="font-bold text-xl text-white mb-3 line-clamp-2 group-hover:text-gray-300 transition-colors">
                     {blog.title}
                   </h3>
-                  <p className="text-gray-400 text-sm mb-6 line-clamp-3 leading-relaxed">
-                    {blog.content}
-                  </p>
+                  <div 
+                    className="text-gray-400 text-sm mb-6 line-clamp-3 leading-relaxed prose prose-invert prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: blog.content }}
+                  />
                   
                   {/* Actions */}
                   <div className="flex gap-3 pt-4">
@@ -320,7 +405,7 @@ export default function Page() {
         {/* Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-zinc-900 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden border border-zinc-800 shadow-2xl">
+            <div className="bg-zinc-900 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-zinc-800 shadow-2xl">
               {/* Modal Header */}
               <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
                 <h2 className="text-2xl text-white font-bold">
@@ -337,7 +422,7 @@ export default function Page() {
               </div>
 
               {/* Modal Body */}
-              <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)] space-y-4">
+              <div className="p-6 overflow-y-auto max-h-[calc(85vh-180px)] space-y-4">
                 {(isCreateError || isUpdateError) && (
                   <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-sm">
                     {createError?.data?.message || updateError?.data?.message || "An error occurred"}
@@ -356,15 +441,14 @@ export default function Page() {
                   />
                 </div>
 
-                {/* Content */}
+                {/* Content with Quill */}
                 <div>
                   <label className="block text-sm font-semibold mb-1 text-gray-300">Content *</label>
-                  <textarea 
-                    value={content} 
-                    onChange={(e) => setContent(e.target.value)}
-                    rows={4}
-                    className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-white/20 text-sm placeholder-gray-500 resize-none"
-                    placeholder="Write your post content..."
+                  <div 
+                    ref={quillRef}
+                    dir="ltr"
+                    className="bg-zinc-800 border border-zinc-700 rounded-lg quill-editor"
+                    style={{ minHeight: '200px' }}
                   />
                 </div>
 
@@ -402,6 +486,11 @@ export default function Page() {
                   >
                     {image ? image.name : "Click to upload image"}
                   </label>
+                  {imagePreview && (
+                    <div className="mt-2">
+                      <img src={imagePreview} alt="Preview" className="w-full h-40 object-cover rounded-lg" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Active Toggle */}
@@ -440,6 +529,94 @@ export default function Page() {
           </div>
         )}
       </div>
+
+      <style jsx global>{`
+        .quill-editor .ql-container {
+          background: #27272a;
+          border: none !important;
+          border-bottom-left-radius: 8px;
+          border-bottom-right-radius: 8px;
+        }
+
+        .quill-editor .ql-editor {
+          color: white !important;
+          direction: ltr !important;
+          text-align: left !important;
+          unicode-bidi: plaintext !important;
+          min-height: 200px;
+        }
+
+        /* Force all text inside editor to be white */
+        .quill-editor .ql-editor *,
+        .quill-editor .ql-editor p,
+        .quill-editor .ql-editor span,
+        .quill-editor .ql-editor div,
+        .quill-editor .ql-editor li,
+        .quill-editor .ql-editor h1,
+        .quill-editor .ql-editor h2,
+        .quill-editor .ql-editor h3,
+        .quill-editor .ql-editor blockquote {
+          color: white !important;
+          direction: ltr !important;
+          text-align: left !important;
+        }
+
+        .quill-editor .ql-toolbar {
+          background: #27272a;
+          border: none !important;
+          border-bottom: 1px solid #3f3f46 !important;
+          border-top-left-radius: 8px;
+          border-top-right-radius: 8px;
+        }
+
+        .quill-editor .ql-toolbar button {
+          color: #a1a1aa;
+        }
+
+        .quill-editor .ql-toolbar button:hover,
+        .quill-editor .ql-toolbar button.ql-active {
+          color: white !important;
+          background: #3f3f46;
+        }
+
+        .quill-editor .ql-stroke {
+          stroke: #a1a1aa;
+        }
+
+        .quill-editor .ql-toolbar button:hover .ql-stroke,
+        .quill-editor .ql-toolbar button.ql-active .ql-stroke {
+          stroke: white;
+        }
+
+        .quill-editor .ql-fill {
+          fill: #a1a1aa;
+        }
+
+        .quill-editor .ql-toolbar button:hover .ql-fill,
+        .quill-editor .ql-toolbar button.ql-active .ql-fill {
+          fill: white;
+        }
+
+        .quill-editor .ql-editor.ql-blank::before {
+          color: #71717a !important;
+          font-style: italic;
+        }
+
+        .quill-editor .ql-picker-label,
+        .quill-editor .ql-picker-options {
+          color: #a1a1aa;
+        }
+
+        .quill-editor .ql-picker-options {
+          background: #27272a;
+          border: 1px solid #3f3f46;
+        }
+
+        .quill-editor .ql-picker-item:hover {
+          color: white;
+          background: #3f3f46;
+        }
+      `}</style>
     </div>
   );
 }
