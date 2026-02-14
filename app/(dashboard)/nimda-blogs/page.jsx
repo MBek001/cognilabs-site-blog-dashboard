@@ -1,4 +1,5 @@
 'use client'
+
 import { useEffect, useState, useRef } from 'react'
 import {
 	useGetAllBlogsQuery,
@@ -8,11 +9,8 @@ import {
 } from '../../../redux/api/blogApi'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-// import dynamic from 'next/dynamic'
-import { Quill } from 'react-quill'
 
 export default function Page() {
-	// Queries
 	const {
 		data: blogs,
 		error: getError,
@@ -20,43 +18,37 @@ export default function Page() {
 		isError: isGetError,
 		refetch,
 	} = useGetAllBlogsQuery()
+
 	const router = useRouter()
 
-	// Mutations
 	const [
 		createBlog,
 		{ isLoading: isCreating, isError: isCreateError, error: createError },
 	] = useCreateBlogMutation()
+
 	const [
 		updateBlog,
 		{ isLoading: isUpdating, isError: isUpdateError, error: updateError },
 	] = useEditBlogMutation()
-	const [
-		deleteBlog,
-		{ isLoading: isDeleting, isError: isDeleteError, error: deleteError },
-	] = useDeleteBlogMutation()
 
-	// Quill editor ref
+	const [deleteBlog, { isLoading: isDeleting }] = useDeleteBlogMutation()
+
 	const quillRef = useRef(null)
 	const editorRef = useRef(null)
 
-	// Modal state
 	const [isModalOpen, setIsModalOpen] = useState(false)
 	const [modalMode, setModalMode] = useState('create')
-	const [imagePreview, setImagePreview] = useState(null)
 
-	// Form state
 	const [title, setTitle] = useState('')
 	const [content, setContent] = useState('')
 	const [image, setImage] = useState(null)
+	const [imagePreview, setImagePreview] = useState(null)
 	const [language, setLanguage] = useState('uz')
 	const [isActive, setIsActive] = useState(true)
 	const [editingId, setEditingId] = useState(null)
 
-	// Filter state
 	const [selectedLanguage, setSelectedLanguage] = useState('all')
 
-	// Filtered blogs
 	const filteredBlogs = blogs?.filter(
 		blog => selectedLanguage === 'all' || blog.language === selectedLanguage,
 	)
@@ -64,22 +56,31 @@ export default function Page() {
 	useEffect(() => {
 		if (isGetError) {
 			const statusCode = getError?.status || getError?.response?.status
-			if (statusCode === 401 || statusCode === 403) {
-				router.push('/login')
-			}
+			if (statusCode === 401 || statusCode === 403) router.push('/login')
 		}
 	}, [isGetError, getError, router])
 
-	// Initialize Quill editor
+	// ---------------- QUILL SAFE INIT ----------------
 	useEffect(() => {
-		if (isModalOpen && quillRef.current && !editorRef.current && Quill) {
-			// Load Quill CSS only once
+		if (!isModalOpen) return
+		if (typeof window === 'undefined') return
+		if (!quillRef.current) return
+		if (editorRef.current) return
+
+		let isMounted = true
+
+		const init = async () => {
+			const QuillModule = await import('quill')
+			const Quill = QuillModule.default
+
 			if (!document.querySelector('link[href*="quill.snow.css"]')) {
 				const link = document.createElement('link')
-				link.href = 'https://cdn.quilljs.com/1.3.6/quill.snow.css'
 				link.rel = 'stylesheet'
+				link.href = 'https://cdn.quilljs.com/1.3.6/quill.snow.css'
 				document.head.appendChild(link)
 			}
+
+			if (!isMounted) return
 
 			editorRef.current = new Quill(quillRef.current, {
 				theme: 'snow',
@@ -97,57 +98,26 @@ export default function Page() {
 				},
 			})
 
-			const editor = editorRef.current
+			editorRef.current.root.setAttribute('dir', 'ltr')
+			editorRef.current.root.style.direction = 'ltr'
+			editorRef.current.root.style.textAlign = 'left'
 
-			// Force LTR globally
-			if (editor?.root) {
-				editor.root.setAttribute('dir', 'ltr')
-				editor.root.style.direction = 'ltr'
-				editor.root.style.textAlign = 'left'
-			}
+			if (content) editorRef.current.root.innerHTML = content
 
-			// Prevent Quill from auto-detecting direction
-			if (editor?.root) {
-				editor.root.classList.add('ql-direction-ltr')
-			}
-
-			// Clean and set initial content (for edit mode)
-			if (content) {
-				const cleanedContent = content
-					.replace(/\sdir=["']rtl["']/gi, '')
-					.replace(/\sdir=["']auto["']/gi, '')
-					.replace(/style=["'][^"']*direction:\s*rtl[^"']*["']/gi, '')
-					.replace(/style=["'][^"']*text-align:\s*right[^"']*["']/gi, '')
-
-				editor.root.innerHTML = cleanedContent
-			}
-
-			// Listen for changes and enforce LTR + white text
-			editor.on('text-change', () => {
-				const htmlContent = editor.root.innerHTML
-				setContent(htmlContent)
-
-				// Force LTR on all block elements
-				const blocks = editor.root.querySelectorAll(
-					'p, div, li, h1, h2, h3, blockquote',
-				)
-				blocks.forEach(block => {
-					block.setAttribute('dir', 'ltr')
-					block.style.direction = 'ltr'
-					block.style.textAlign = 'left'
-				})
+			editorRef.current.on('text-change', () => {
+				setContent(editorRef.current.root.innerHTML)
 			})
 		}
 
-		// Cleanup when modal closes
-		return () => {
-			if (!isModalOpen && editorRef.current) {
-				editorRef.current = null
-			}
-		}
-	}, [isModalOpen, content])
+		init()
 
-	// Modal functions
+		return () => {
+			isMounted = false
+			editorRef.current = null
+		}
+	}, [isModalOpen])
+
+	// ---------------- MODAL HELPERS ----------------
 	const openCreateModal = () => {
 		setModalMode('create')
 		setTitle('')
@@ -157,77 +127,53 @@ export default function Page() {
 		setLanguage('uz')
 		setIsActive(true)
 		setEditingId(null)
-		setIsModalOpen(true)
 		editorRef.current = null
+		setIsModalOpen(true)
 	}
 
 	const openEditModal = blog => {
 		setModalMode('edit')
 		setTitle(blog.title)
 		setContent(blog.content)
-		setLanguage(blog.language || 'uz')
+		setLanguage(blog.language)
 		setIsActive(blog.is_active)
 		setEditingId(blog.id)
 		setImage(null)
 		setImagePreview(blog.image_url)
-		setIsModalOpen(true)
 		editorRef.current = null
+		setIsModalOpen(true)
 	}
 
 	const closeModal = () => {
 		setIsModalOpen(false)
-		setTitle('')
-		setContent('')
-		setImage(null)
-		setImagePreview(null)
-		setLanguage('uz')
-		setIsActive(true)
-		setEditingId(null)
 		editorRef.current = null
 	}
 
 	const handleImageChange = e => {
 		const file = e.target.files[0]
-		if (file) {
-			setImage(file)
-			const reader = new FileReader()
-			reader.onloadend = () => {
-				setImagePreview(reader.result)
-			}
-			reader.readAsDataURL(file)
-		}
+		if (!file) return
+		setImage(file)
+		const reader = new FileReader()
+		reader.onload = () => setImagePreview(reader.result)
+		reader.readAsDataURL(file)
 	}
 
 	const handleCreate = async () => {
-		if (!title || !content || !image) {
-			alert("Iltimos, barcha maydonlarni to'ldiring va rasm tanlang!")
-			return
-		}
+		if (!title || !content || !image) return alert('Fill all fields')
 
 		const formData = new FormData()
 		formData.append('title', title)
 		formData.append('content', content)
 		formData.append('image', image)
-		formData.append('is_active', isActive)
 		formData.append('language', language)
+		formData.append('is_active', isActive)
 
-		try {
-			await createBlog(formData).unwrap()
-			alert("Blog muvaffaqiyatli qo'shildi!")
-			closeModal()
-			refetch()
-		} catch (err) {
-			console.error('Create error:', err)
-			alert(`Xato yuz berdi: ${err?.data?.message || err.message}`)
-		}
+		await createBlog(formData).unwrap()
+		closeModal()
+		refetch()
 	}
 
 	const handleUpdate = async () => {
-		if (!title || !content) {
-			alert("Iltimos, title va content maydonlarini to'ldiring!")
-			return
-		}
-
 		const formData = new FormData()
 		formData.append('title', title)
 		formData.append('content', content)
@@ -235,27 +181,15 @@ export default function Page() {
 		formData.append('is_active', isActive)
 		if (image) formData.append('image', image)
 
-		try {
-			await updateBlog({ id: editingId, data: formData }).unwrap()
-			alert('Blog muvaffaqiyatli yangilandi!')
-			closeModal()
-			refetch()
-		} catch (err) {
-			console.error('Update error:', err)
-			alert(`Xato yuz berdi: ${err?.data?.message || err.message}`)
-		}
+		await updateBlog({ id: editingId, data: formData }).unwrap()
+		closeModal()
+		refetch()
 	}
 
 	const handleDelete = async id => {
-		if (!confirm("Rostan ham o'chirmoqchimisiz?")) return
-		try {
-			await deleteBlog(id).unwrap()
-			alert("Blog o'chirildi!")
-			refetch()
-		} catch (err) {
-			console.error('Delete error:', err)
-			alert("Blogni o'chirishda xato yuz berdi!")
-		}
+		if (!confirm('Delete?')) return
+		await deleteBlog(id).unwrap()
+		refetch()
 	}
 
 	return (
