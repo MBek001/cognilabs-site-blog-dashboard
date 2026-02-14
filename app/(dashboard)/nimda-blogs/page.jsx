@@ -8,13 +8,12 @@ import {
 } from "../../../redux/api/blogApi";
 import Image from "next/image";
 import { useRouter } from 'next/navigation'
+import dynamic from "next/dynamic";
 
 // Import Quill dynamically to avoid SSR issues
-let Quill;
-if (typeof window !== 'undefined') {
-  Quill = require('quill');
-}
-
+const Quill = dynamic(() => import("react-quill"), {
+  ssr: false,
+});
 export default function Page() {
   // Queries
   const { data: blogs, error: getError, isLoading: isLoadingBlogs, isError: isGetError, refetch } = useGetAllBlogsQuery();
