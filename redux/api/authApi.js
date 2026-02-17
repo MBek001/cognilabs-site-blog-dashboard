@@ -25,7 +25,7 @@ export const authApi = createApi({
 
     isAdmin: builder.mutation({
       query: () => ({
-        url: "/admin/is-admin",
+        url: "/admin/is-admin/",
         method: "GET",
       }),
     }),
