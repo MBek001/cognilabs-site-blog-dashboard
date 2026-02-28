@@ -12,6 +12,8 @@ const PAGE_DEFINITIONS = [
   { key: "insights", label: "Insights Page", path: "/insights" },
 ];
 
+const LOCALE_PREFIXES = ["en", "ru", "uz"];
+
 const INTERACTION_DEFINITIONS = [
   {
     key: "mainContactNowButton",
@@ -47,8 +49,25 @@ const INTERACTION_DEFINITIONS = [
 
 function normalizePath(path = "") {
   if (!path) return "/";
-  if (path === "/") return "/";
-  return path.endsWith("/") ? path.slice(0, -1) : path;
+  const trimmed = path === "/" ? "/" : path.endsWith("/") ? path.slice(0, -1) : path;
+  const parts = trimmed.split("/").filter(Boolean);
+
+  if (parts.length === 0) return "/";
+
+  if (LOCALE_PREFIXES.includes(parts[0])) {
+    const localizedPath = `/${parts.slice(1).join("/")}`;
+    return localizedPath === "/" || localizedPath === "" ? "/" : localizedPath;
+  }
+
+  return trimmed;
+}
+
+function buildExactPathFilters(path) {
+  if (path === "/") {
+    return ["/", ...LOCALE_PREFIXES.map((locale) => `/${locale}`)];
+  }
+
+  return [path, ...LOCALE_PREFIXES.map((locale) => `/${locale}${path}`)];
 }
 
 export async function GET() {
@@ -82,6 +101,9 @@ export async function GET() {
     const eventRow = eventReport.rows?.[0];
 
     // Single report for all relevant routes; we aggregate rows into exact cards below.
+    const exactPaths = PAGE_DEFINITIONS.flatMap((item) => buildExactPathFilters(item.path));
+    const uniqueExactPaths = [...new Set(exactPaths)];
+
     const [pageBreakdownReport] = await client.runReport({
       property,
       dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
@@ -90,10 +112,10 @@ export async function GET() {
       dimensionFilter: {
         orGroup: {
           expressions: [
-            ...PAGE_DEFINITIONS.map((item) => ({
+            ...uniqueExactPaths.map((path) => ({
               filter: {
                 fieldName: "pagePath",
-                stringFilter: { matchType: "EXACT", value: item.path },
+                stringFilter: { matchType: "EXACT", value: path },
               },
             })),
             {
@@ -102,6 +124,12 @@ export async function GET() {
                 stringFilter: { matchType: "BEGINS_WITH", value: "/insights/" },
               },
             },
+            ...LOCALE_PREFIXES.map((locale) => ({
+              filter: {
+                fieldName: "pagePath",
+                stringFilter: { matchType: "BEGINS_WITH", value: `/${locale}/insights/` },
+              },
+            })),
           ],
         },
       },
