@@ -14,38 +14,7 @@ const PAGE_DEFINITIONS = [
 
 const LOCALE_PREFIXES = ["en", "ru", "uz"];
 
-const INTERACTION_DEFINITIONS = [
-  {
-    key: "mainContactNowButton",
-    label: "Main Page Contact Now Button",
-    eventName: "contact_now_click",
-    pagePath: "/",
-  },
-  {
-    key: "mainPageForm",
-    label: "Main Page Form",
-    eventName: "main_form_submit",
-    pagePath: "/",
-  },
-  {
-    key: "aboutUsForm",
-    label: "About Us Page Form",
-    eventName: "about_form_submit",
-    pagePath: "/about-us",
-  },
-  {
-    key: "careersForm",
-    label: "Careers Page Form",
-    eventName: "careers_form_submit",
-    pagePath: "/careers",
-  },
-  {
-    key: "servicesForm",
-    label: "Services Page Form",
-    eventName: "services_form_submit",
-    pagePath: "/services",
-  },
-];
+const DIMENSION_FALLBACK = "(not set)";
 
 function normalizePath(path = "") {
   if (!path) return "/";
@@ -70,9 +39,107 @@ function buildExactPathFilters(path) {
   return [path, ...LOCALE_PREFIXES.map((locale) => `/${locale}${path}`)];
 }
 
-export async function GET() {
+function parseRequestedRange(requestUrl) {
+  const url = new URL(requestUrl);
+  const preset = url.searchParams.get("range") || "30d";
+  const startDateParam = url.searchParams.get("startDate");
+  const endDateParam = url.searchParams.get("endDate");
+
+  const isIsoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "");
+
+  if (preset === "7d") {
+    return { preset, startDate: "7daysAgo", endDate: "today" };
+  }
+
+  if (
+    preset === "custom" &&
+    isIsoDate(startDateParam) &&
+    isIsoDate(endDateParam)
+  ) {
+    return { preset, startDate: startDateParam, endDate: endDateParam };
+  }
+
+  return { preset: "30d", startDate: "30daysAgo", endDate: "today" };
+}
+
+function toDimensionValue(row, index) {
+  const value = row?.dimensionValues?.[index]?.value;
+  return value && value.length > 0 ? value : DIMENSION_FALLBACK;
+}
+
+function mapInteractionRows(rows = [], type) {
+  const keyDimensionIndex = type === "button_click" ? 1 : 2;
+
+  const groupedByKey = {};
+  const groupedByLocale = {};
+  const groupedByPagePath = {};
+  const groupedByDate = {};
+
+  const mappedRows = rows.map((row) => {
+    const eventName = toDimensionValue(row, 0);
+    const keyValue = toDimensionValue(row, keyDimensionIndex);
+    const locale = toDimensionValue(row, 3);
+    const pagePath = normalizePath(toDimensionValue(row, 4));
+    const date = toDimensionValue(row, 5);
+    const eventCount = Number(row?.metricValues?.[0]?.value || 0);
+
+    groupedByKey[keyValue] = (groupedByKey[keyValue] || 0) + eventCount;
+    groupedByLocale[locale] = (groupedByLocale[locale] || 0) + eventCount;
+    groupedByPagePath[pagePath] = (groupedByPagePath[pagePath] || 0) + eventCount;
+    groupedByDate[date] = (groupedByDate[date] || 0) + eventCount;
+
+    if (type === "button_click") {
+      return {
+        eventName,
+        elementId: keyValue,
+        locale,
+        pagePath,
+        date,
+        eventCount,
+      };
+    }
+
+    return {
+      eventName,
+      formId: keyValue,
+      locale,
+      pagePath,
+      date,
+      eventCount,
+    };
+  });
+
+  const total = mappedRows.reduce((sum, item) => sum + item.eventCount, 0);
+
+  return {
+    total,
+    rows: mappedRows,
+    [type === "button_click" ? "byElementId" : "byFormId"]: Object.entries(
+      groupedByKey
+    ).map(([id, eventCount]) => ({
+      id,
+      eventCount,
+    })),
+    byLocale: Object.entries(groupedByLocale).map(([locale, eventCount]) => ({
+      locale,
+      eventCount,
+    })),
+    byPagePath: Object.entries(groupedByPagePath).map(([pagePath, eventCount]) => ({
+      pagePath,
+      eventCount,
+    })),
+    byDate: Object.entries(groupedByDate).map(([date, eventCount]) => ({
+      date,
+      eventCount,
+    })),
+  };
+}
+
+export async function GET(request) {
   try {
     const { client, property } = createGa4Client();
+    const { preset, startDate, endDate } = parseRequestedRange(request.url);
+    const interactionDateRanges = [{ startDate, endDate }];
 
     const [overviewReport] = await client.runReport({
       property,
@@ -80,6 +147,7 @@ export async function GET() {
       metrics: [{ name: "activeUsers" }, { name: "screenPageViews" }],
     });
 
+    // Keep page_view logic intact.
     const [eventReport] = await client.runReport({
       property,
       dateRanges: [{ startDate: "7daysAgo", endDate: "today" }],
@@ -178,51 +246,66 @@ export async function GET() {
       },
     ];
 
-    // Query event counts for requested button clicks and form submissions.
-    const [interactionsReport] = await client.runReport({
+    const interactionDimensions = [
+      { name: "eventName" },
+      { name: "customEvent:element_id" },
+      { name: "customEvent:form_id" },
+      { name: "customEvent:locale" },
+      { name: "pagePath" },
+      { name: "date" },
+    ];
+
+    const [buttonClickReport] = await client.runReport({
       property,
-      dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
-      dimensions: [{ name: "eventName" }, { name: "pagePath" }],
+      dateRanges: interactionDateRanges,
+      dimensions: interactionDimensions,
       metrics: [{ name: "eventCount" }],
       dimensionFilter: {
         filter: {
           fieldName: "eventName",
-          inListFilter: {
-            values: INTERACTION_DEFINITIONS.map((item) => item.eventName),
+          stringFilter: {
+            value: "button_click",
+            matchType: "EXACT",
           },
         },
       },
       limit: 1000,
     });
 
-    const interactions = INTERACTION_DEFINITIONS.map((item) => ({
-      key: item.key,
-      label: item.label,
-      eventName: item.eventName,
-      pagePath: item.pagePath,
-      eventCount: 0,
-    }));
+    const [formSubmitReport] = await client.runReport({
+      property,
+      dateRanges: interactionDateRanges,
+      dimensions: interactionDimensions,
+      metrics: [{ name: "eventCount" }],
+      dimensionFilter: {
+        filter: {
+          fieldName: "eventName",
+          stringFilter: {
+            value: "form_submit",
+            matchType: "EXACT",
+          },
+        },
+      },
+      limit: 1000,
+    });
 
-    for (const row of interactionsReport.rows || []) {
-      const eventName = row.dimensionValues?.[0]?.value || "";
-      const pagePath = normalizePath(row.dimensionValues?.[1]?.value || "");
-      const eventCount = Number(row.metricValues?.[0]?.value || 0);
-
-      const match = interactions.find(
-        (item) =>
-          item.eventName === eventName &&
-          normalizePath(item.pagePath) === pagePath
-      );
-
-      if (match) {
-        match.eventCount += eventCount;
-      }
-    }
+    const buttonClicks = mapInteractionRows(
+      buttonClickReport.rows || [],
+      "button_click"
+    );
+    const formSubmissions = mapInteractionRows(
+      formSubmitReport.rows || [],
+      "form_submit"
+    );
 
     return NextResponse.json({
       ok: true,
       data: {
-        range: "last_30_days",
+        range: {
+          preset,
+          startDate,
+          endDate,
+        },
         activeUsers: Number(overviewRow?.metricValues?.[0]?.value || 0),
         screenPageViews: Number(overviewRow?.metricValues?.[1]?.value || 0),
         sampleEvent: {
@@ -230,7 +313,10 @@ export async function GET() {
           eventCount: Number(eventRow?.metricValues?.[0]?.value || 0),
         },
         pages,
-        interactions,
+        interactions: {
+          buttonClicks,
+          formSubmissions,
+        },
       },
     });
   } catch (error) {
