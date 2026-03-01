@@ -1,6 +1,6 @@
 "use client"
 
-import { LayoutDashboard, Book, BarChart3, LogOut } from "lucide-react"
+import { LayoutDashboard, Book, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -9,7 +9,6 @@ import { useState } from "react"
 const menuItems = [
   { id: "dashboard", url: '/nimda-dashboard', label: "Dashboard", icon: LayoutDashboard },
   { id: "blogs", url: '/nimda-blogs', label: "Blogs", icon: Book },
-  { id: "analytics", url: '/nimda-analytics', label: "Analytics", icon: BarChart3 },
 ]
 
 export default function Sidebar({ activeSection, setActiveSection }) {

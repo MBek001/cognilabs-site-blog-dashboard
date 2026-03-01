@@ -14,11 +14,6 @@ export default function DashboardGroupLayout({ children }) {
       return
     }
 
-    if (pathname?.includes("/nimda-analytics")) {
-      setActiveSection("analytics")
-      return
-    }
-
     setActiveSection("dashboard")
   }, [pathname])
 
